@@ -94,27 +94,25 @@ class VillageAgent(WorldAgent):
         self.happiness = self.calculate_happiness()
 
     def harvest_resources(self):
-        # find neighboring environment agents and harvest resources from them
-        # get environment cells in current cell
-        other_cells = self.cell.get_neighborhood(include_center=True)
-        for other_cell in other_cells:
-            for other_agent in other_cell.agents:
-                if isinstance(other_agent, EnvironmentAgent):
-                    # Harvest a portion of the resources from the environment limited by population
-                    harvested_food = int(other_agent.resources["food"] * 0.1)
-                    harvested_water = int(other_agent.resources["water"] * 0.1)
-                    harvested_materials = int(other_agent.resources["materials"] * 0.1)
+        env_agents = [
+            agent for agent in self.cell.agents if isinstance(agent, EnvironmentAgent)
+        ]
+        for env_agent in env_agents:
+            # Harvest a portion of the resources from the environment
+            harvested_food = int(env_agent.resources["food"] * 0.1)
+            harvested_water = int(env_agent.resources["water"] * 0.1)
+            harvested_materials = int(env_agent.resources["materials"] * 0.1)
 
-                    other_agent.resources["food"] -= harvested_food
-                    other_agent.resources["water"] -= harvested_water
-                    other_agent.resources["materials"] -= harvested_materials
+            env_agent.resources["food"] -= harvested_food
+            env_agent.resources["water"] -= harvested_water
+            env_agent.resources["materials"] -= harvested_materials
 
-                    self.resources["food"] += harvested_food
-                    self.resources["water"] += harvested_water
-                    self.resources["materials"] += harvested_materials
-                    print(
-                        f"{self.name} harvested {harvested_food} food, {harvested_water} water, and {harvested_materials} materials from a {other_agent.type.value}"
-                    )
+            self.resources["food"] += harvested_food
+            self.resources["water"] += harvested_water
+            self.resources["materials"] += harvested_materials
+            print(
+                f"{self.name} harvested {harvested_food} food, {harvested_water} water, and {harvested_materials} materials from a {env_agent.type.value}"
+            )
 
     def step(self):
         self.harvest_resources()
