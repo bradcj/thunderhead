@@ -1,0 +1,54 @@
+{
+    "villages": [
+        {
+            "name": "River Village",
+            "population": 50,
+            "resources": {
+                "food": 100,
+                "water": 200,
+                "materials": 50
+            },
+            "location": {
+                "x": 2,
+                "y": 2
+            },
+            "happiness": 1.0
+        },
+        {
+            "name": "Forest Village",
+            "population": 100,
+            "resources": {
+                "food": 50,
+                "water": 50,
+                "materials": 400
+            },
+            "location": {
+                "x": 3,
+                "y": 3
+            },
+            "happiness": 0.4
+        }
+    ],
+    "environment": [
+        {
+            "type": "river",
+            "location": {
+                "x": 2,
+                "y": 2
+            },
+            "food": 100,
+            "water": 400,
+            "materials": 0
+        },
+        {
+            "type": "forest",
+            "location": {
+                "x": 3,
+                "y": 3
+            },
+            "food": 50,
+            "water": 0,
+            "materials": 400
+        }
+    ]
+}

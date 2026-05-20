@@ -5,5 +5,6 @@ description = "Introducing Thunderhead, your friendly AI government overlord."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "mesa[rec]>=3.5.1",
     "numpy>=2.4.6",
 ]
