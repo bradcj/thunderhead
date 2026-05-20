@@ -2,41 +2,36 @@ from enum import Enum
 import json
 import os
 import numpy as np
+import seaborn as sns
 
 import mesa
 from mesa.discrete_space import CellAgent, OrthogonalMooreGrid
 
-initial_state = {
-    "villages": [
+INITIAL_STATE = {
+    "agents": [
         {
+            "type": "village",
             "name": "River Village",
             "population": 50,
             "resources": {"food": 100, "water": 200, "materials": 50},
             "location": {"x": 2, "y": 2},
-            "happiness": None,
         },
         {
+            "type": "village",
             "name": "Forest Village",
             "population": 100,
             "resources": {"food": 50, "water": 50, "materials": 400},
             "location": {"x": 3, "y": 3},
-            "happiness": None,
         },
-    ],
-    "environment": [
         {
             "type": "river",
             "location": {"x": 2, "y": 2},
-            "food": 100,
-            "water": 400,
-            "materials": 0,
+            "resources": {"food": 100, "water": 400, "materials": 0},
         },
         {
             "type": "forest",
             "location": {"x": 3, "y": 3},
-            "food": 50,
-            "water": 0,
-            "materials": 400,
+            "resources": {"food": 50, "water": 0, "materials": 400},
         },
     ],
 }
@@ -47,27 +42,35 @@ class EnvironmentType(Enum):
     FOREST = "forest"
 
 
-class EnvironmentAgent(CellAgent):
-    def __init__(self, model, cell, env_type: EnvironmentType, food, water, materials):
+class WorldAgent(CellAgent):
+    def __init__(self, model, cell, resources):
         super().__init__(model)
         self.cell = cell
+        self.resources = resources
+
+
+class EnvironmentAgent(WorldAgent):
+    def __init__(self, model, cell, env_type: EnvironmentType, resources):
+        super().__init__(model, cell, resources)
         self.type = env_type
-        self.food = food
-        self.water = water
-        self.materials = materials
+
+    def to_json(self):
+        return {
+            "type": self.type.value,
+            "location": {"x": self.cell.coordinate[0], "y": self.cell.coordinate[1]},
+            "resources": self.resources,
+        }
 
 
-class VillageAgent(CellAgent):
+class VillageAgent(WorldAgent):
     FOOD_WEIGHT = 0.4
     WATER_WEIGHT = 0.4
     MATERIALS_WEIGHT = 0.2
 
     def __init__(self, model, cell, name, population, resources):
-        super().__init__(model)
-        self.cell = cell
+        super().__init__(model, cell, resources)
         self.name = name
         self.population = population
-        self.resources = resources
         self.happiness = self.calculate_happiness()
 
     def calculate_happiness(self):
@@ -87,34 +90,40 @@ class VillageAgent(CellAgent):
         total_score = food_score + water_score + materials_score
         return total_score
 
+    def to_json(self):
+        return {
+            "type": "village",
+            "name": self.name,
+            "population": self.population,
+            "resources": self.resources,
+            "location": {"x": self.cell.coordinate[0], "y": self.cell.coordinate[1]},
+            "happiness": self.happiness,
+        }
+
 
 class WorldModel(mesa.Model):
-    def __init__(self, width, height, villages, environment, seed=None):
+    def __init__(self, width, height, agents, seed=None):
         super().__init__(seed=seed)
-        self.num_villages = len(villages)
-        self.num_environment = len(environment)
+        self.num_agents = len(agents)
         self.grid = OrthogonalMooreGrid(
             (width, height), torus=False, random=self.random
         )
-
-        for env in environment:
-            env_agent = EnvironmentAgent(
-                self,
-                self.grid[env["location"]["x"], env["location"]["y"]],
-                EnvironmentType(env["type"]),
-                env["food"],
-                env["water"],
-                env["materials"],
-            )
-
-        for village in villages:
-            village_agent = VillageAgent(
-                self,
-                self.grid[village["location"]["x"], village["location"]["y"]],
-                village["name"],
-                village["population"],
-                village["resources"],
-            )
+        for agent in agents:
+            if agent["type"] == "village":
+                VillageAgent(
+                    self,
+                    self.grid[agent["location"]["x"], agent["location"]["y"]],
+                    agent["name"],
+                    agent["population"],
+                    agent["resources"],
+                )
+            elif agent["type"] in EnvironmentType._value2member_map_:
+                EnvironmentAgent(
+                    self,
+                    self.grid[agent["location"]["x"], agent["location"]["y"]],
+                    EnvironmentType(agent["type"]),
+                    agent["resources"],
+                )
 
     def step(self):
         # calculate/update happiness for all villages
@@ -129,7 +138,7 @@ class WorldModel(mesa.Model):
                 for neighbor in neighbor_cell.agents:
                     if isinstance(neighbor, EnvironmentAgent):
                         print(
-                            f"{village.name} is near a {neighbor.type.value} with resources: food={neighbor.food}, water={neighbor.water}, materials={neighbor.materials}"
+                            f"{village.name} is near a {neighbor.type.value} with resources: {neighbor.resources}"
                         )
                     elif isinstance(neighbor, VillageAgent):
                         print(
@@ -137,34 +146,7 @@ class WorldModel(mesa.Model):
                         )
 
     def to_json(self):
-        return {
-            "villages": [
-                {
-                    "name": agent.name,
-                    "population": agent.population,
-                    "resources": agent.resources,
-                    "location": {
-                        "x": agent.cell.coordinate[0],
-                        "y": agent.cell.coordinate[1],
-                    },
-                    "happiness": agent.happiness,
-                }
-                for agent in self.agents.select(agent_type=VillageAgent)
-            ],
-            "environment": [
-                {
-                    "type": agent.type.value,
-                    "location": {
-                        "x": agent.cell.coordinate[0],
-                        "y": agent.cell.coordinate[1],
-                    },
-                    "food": agent.food,
-                    "water": agent.water,
-                    "materials": agent.materials,
-                }
-                for agent in self.agents.select(agent_type=EnvironmentAgent)
-            ],
-        }
+        return {"agents": [agent.to_json() for agent in self.agents]}
 
 
 STATE_FILENAME = "state.json"
@@ -177,7 +159,7 @@ def save_state(state, filename=STATE_FILENAME):
 
 def load_state(filename=STATE_FILENAME):
     if not os.path.exists(filename):
-        return initial_state
+        return INITIAL_STATE
     with open(filename, "r") as f:
         return json.load(f)
 
@@ -185,8 +167,17 @@ def load_state(filename=STATE_FILENAME):
 def main():
     state = load_state()
 
-    model = WorldModel(5, 5, state["villages"], state["environment"])
+    model = WorldModel(5, 5, state["agents"])
     model.step()
+
+    agent_counts = np.zeros((model.grid.width, model.grid.height))
+
+    for cell in model.grid.all_cells:
+        agent_counts[cell.coordinate] = len(cell.agents)
+    g = sns.heatmap(agent_counts, cmap="viridis", annot=True, cbar=False, square=True)
+    g.figure.set_size_inches(5, 5)
+    g.set(title="Number of agents on each cell of the grid")
+    g.figure.savefig("agent_counts.png")
 
     save_state(model.to_json())
 

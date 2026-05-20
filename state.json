@@ -1,6 +1,7 @@
 {
-    "villages": [
+    "agents": [
         {
+            "type": "village",
             "name": "River Village",
             "population": 50,
             "resources": {
@@ -15,6 +16,7 @@
             "happiness": 1.0
         },
         {
+            "type": "village",
             "name": "Forest Village",
             "population": 100,
             "resources": {
@@ -27,18 +29,18 @@
                 "y": 3
             },
             "happiness": 0.4
-        }
-    ],
-    "environment": [
+        },
         {
             "type": "river",
             "location": {
                 "x": 2,
                 "y": 2
             },
-            "food": 100,
-            "water": 400,
-            "materials": 0
+            "resources": {
+                "food": 100,
+                "water": 400,
+                "materials": 0
+            }
         },
         {
             "type": "forest",
@@ -46,9 +48,11 @@
                 "x": 3,
                 "y": 3
             },
-            "food": 50,
-            "water": 0,
-            "materials": 400
+            "resources": {
+                "food": 50,
+                "water": 0,
+                "materials": 400
+            }
         }
     ]
 }
