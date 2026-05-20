@@ -157,32 +157,11 @@ class VillageAgent(WorldAgent):
             agent for agent in self.cell.agents if isinstance(agent, EnvironmentAgent)
         ]
         for env_agent in env_agents:
-            # # Harvest a portion of the resources from the environment
-            # harvested_food = int(env_agent.resources["food"] * 0.1)
-            # harvested_water = int(env_agent.resources["water"] * 0.1)
-            # harvested_materials = int(env_agent.resources["materials"] * 0.1)
-
-            # env_agent.resources["food"] -= harvested_food
-            # env_agent.resources["water"] -= harvested_water
-            # env_agent.resources["materials"] -= harvested_materials
-
-            # self.resources["food"] += harvested_food
-            # self.resources["water"] += harvested_water
-            # self.resources["materials"] += harvested_materials
-            # logger.info(
-            #     f"{self.name} harvested {harvested_food} food, {harvested_water} water, and {harvested_materials} materials from a {env_agent.type.value}"
-            # )
-            env_agents = [
-                agent
-                for agent in self.cell.agents
-                if isinstance(agent, EnvironmentAgent)
-            ]
-            for env_agent in env_agents:
-                self.harvest_resource(
-                    env_agent=env_agent,
-                    resource_type=ResourceType.FOOD,
-                    amount=self.available_workers * self.WORKER_YIELD,
-                )
+            self.harvest_resource(
+                env_agent=env_agent,
+                resource_type=ResourceType.FOOD,
+                amount=self.available_workers * self.WORKER_YIELD,
+            )
 
     def step(self):
         # assume all population is available to work
