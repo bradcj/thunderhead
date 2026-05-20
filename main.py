@@ -14,7 +14,7 @@ INITIAL_STATE = {
             "name": "River Village",
             "population": 50,
             "resources": {"food": 100, "water": 200, "materials": 50},
-            "location": {"x": 2, "y": 2},
+            "location": {"x": 1, "y": 1},
         },
         {
             "type": "village",
@@ -25,7 +25,7 @@ INITIAL_STATE = {
         },
         {
             "type": "river",
-            "location": {"x": 2, "y": 2},
+            "location": {"x": 1, "y": 1},
             "resources": {"food": 100, "water": 400, "materials": 0},
         },
         {
@@ -90,6 +90,36 @@ class VillageAgent(WorldAgent):
         total_score = food_score + water_score + materials_score
         return total_score
 
+    def update_happiness(self):
+        self.happiness = self.calculate_happiness()
+
+    def harvest_resources(self):
+        # find neighboring environment agents and harvest resources from them
+        # get environment cells in current cell
+        other_cells = self.cell.get_neighborhood(include_center=True)
+        for other_cell in other_cells:
+            for other_agent in other_cell.agents:
+                if isinstance(other_agent, EnvironmentAgent):
+                    # Harvest a portion of the resources from the environment limited by population
+                    harvested_food = int(other_agent.resources["food"] * 0.1)
+                    harvested_water = int(other_agent.resources["water"] * 0.1)
+                    harvested_materials = int(other_agent.resources["materials"] * 0.1)
+
+                    other_agent.resources["food"] -= harvested_food
+                    other_agent.resources["water"] -= harvested_water
+                    other_agent.resources["materials"] -= harvested_materials
+
+                    self.resources["food"] += harvested_food
+                    self.resources["water"] += harvested_water
+                    self.resources["materials"] += harvested_materials
+                    print(
+                        f"{self.name} harvested {harvested_food} food, {harvested_water} water, and {harvested_materials} materials from a {other_agent.type.value}"
+                    )
+
+    def step(self):
+        self.harvest_resources()
+        self.update_happiness()
+
     def to_json(self):
         return {
             "type": "village",
@@ -129,7 +159,7 @@ class WorldModel(mesa.Model):
         # calculate/update happiness for all villages
         village_agents = self.agents.select(agent_type=VillageAgent)
         for village in village_agents:
-            village.happiness = village.calculate_happiness()
+            village.step()
             print(
                 f"{village.name} has population={village.population}, resources={village.resources}, happiness={village.happiness:.2f}"
             )
@@ -165,10 +195,14 @@ def load_state(filename=STATE_FILENAME):
 
 
 def main():
-    state = load_state()
+    # state = load_state()
+    state = INITIAL_STATE
+    print(f"Initial state: {state}")
 
     model = WorldModel(5, 5, state["agents"])
-    model.step()
+    for _ in range(5):
+        model.step()
+        print(f"State after step {_ + 1}: {model.to_json()}")
 
     agent_counts = np.zeros((model.grid.width, model.grid.height))
 
