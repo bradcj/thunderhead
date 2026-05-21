@@ -70,9 +70,26 @@ class WorldAgent(CellAgent):
 
 
 class EnvironmentAgent(WorldAgent):
-    def __init__(self, model, cell, env_type: EnvironmentType, resources):
+    WATER_REPLENISH_RATE = 100
+    # using simple rate for food/materials for now, can add more complex logic later (e.g. overconsumption reduces replenishment)
+    FOOD_REPLENISH_RATE = 50
+    MATERIALS_REPLENISH_RATE = 50
+
+    def __init__(
+        self,
+        model,
+        cell,
+        env_type: EnvironmentType,
+        resources,
+    ):
         super().__init__(model, cell, resources)
         self.type = env_type
+
+    def replenish_resources(self):
+        self.resources[ResourceType.WATER] += self.WATER_REPLENISH_RATE
+        self.resources[ResourceType.FOOD] += self.FOOD_REPLENISH_RATE
+        self.resources[ResourceType.MATERIALS] += self.MATERIALS_REPLENISH_RATE
+        logger.info(f"{self.type.value} replenished resources to {self.resources}")
 
     def to_json(self):
         return {
@@ -83,6 +100,34 @@ class EnvironmentAgent(WorldAgent):
                 for resource_type, amount in self.resources.items()
             },
         }
+
+
+class RiverEnvironmentAgent(EnvironmentAgent):
+    WATER_REPLENISH_RATE = 100
+    FOOD_REPLENISH_MULTIPLIER = 1.5
+    MATERIALS_REPLENISH_RATE = 0
+
+    def __init__(self, model, cell, resources):
+        super().__init__(
+            model,
+            cell,
+            EnvironmentType.RIVER,
+            resources,
+        )
+
+
+class ForestEnvironmentAgent(EnvironmentAgent):
+    WATER_REPLENISH_RATE = 0
+    FOOD_REPLENISH_MULTIPLIER = 1.5
+    MATERIALS_REPLENISH_RATE = 50
+
+    def __init__(self, model, cell, resources):
+        super().__init__(
+            model,
+            cell,
+            EnvironmentType.FOREST,
+            resources,
+        )
 
 
 class RationLevel(Enum):
@@ -294,19 +339,31 @@ class WorldModel(mesa.Model):
                         for key, value in agent["resources"].items()
                     },
                 )
-            elif agent["type"] in EnvironmentType._value2member_map_:
-                EnvironmentAgent(
+            elif agent["type"] == EnvironmentType.RIVER.value:
+                RiverEnvironmentAgent(
                     self,
                     self.grid[agent["location"]["x"], agent["location"]["y"]],
-                    EnvironmentType(agent["type"]),
                     {
                         ResourceType[key.upper()]: value
                         for key, value in agent["resources"].items()
                     },
                 )
+            elif agent["type"] == EnvironmentType.FOREST.value:
+                ForestEnvironmentAgent(
+                    self,
+                    self.grid[agent["location"]["x"], agent["location"]["y"]],
+                    {
+                        ResourceType[key.upper()]: value
+                        for key, value in agent["resources"].items()
+                    },
+                )
+            else:
+                raise ValueError(f"Unknown agent type: {agent['type']}")
 
     def step(self):
-        # calculate/update happiness for all villages
+        env_agents = self.agents.select(agent_type=EnvironmentAgent)
+        env_agents.do("replenish_resources")
+
         village_agents = self.agents.select(agent_type=VillageAgent)
         village_agents.do("replenish_workers")
         village_agents.shuffle_do("harvest_resources")
