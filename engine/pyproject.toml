@@ -7,5 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "mesa[rec]>=3.5.1",
     "numpy>=2.4.6",
+    "openai>=2.38.0",
+    "pydantic>=2.13.4",
     "seaborn>=0.13.2",
 ]

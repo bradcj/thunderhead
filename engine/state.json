@@ -2,11 +2,12 @@
     "agents": [
         {
             "type": "village",
+            "id": "village_1_1",
             "name": "River Village",
             "population": 50,
             "resources": {
-                "food": 140,
-                "water": 363,
+                "food": 100,
+                "water": 200,
                 "materials": 50
             },
             "location": {
@@ -17,41 +18,44 @@
         },
         {
             "type": "village",
+            "id": "village_3_3",
             "name": "Forest Village",
             "population": 100,
             "resources": {
-                "food": 69,
+                "food": 50,
                 "water": 50,
-                "materials": 563
+                "materials": 400
             },
             "location": {
                 "x": 3,
                 "y": 3
             },
-            "happiness": 0.438
+            "happiness": 0.4
         },
         {
             "type": "river",
+            "id": "river_1_1",
             "location": {
                 "x": 1,
                 "y": 1
             },
             "resources": {
-                "food": 60,
-                "water": 237,
+                "food": 150,
+                "water": 500,
                 "materials": 0
             }
         },
         {
             "type": "forest",
+            "id": "forest_3_3",
             "location": {
                 "x": 3,
                 "y": 3
             },
             "resources": {
-                "food": 31,
+                "food": 100,
                 "water": 0,
-                "materials": 237
+                "materials": 450
             }
         }
     ]

@@ -19,6 +19,7 @@ INITIAL_STATE = {
     "agents": [
         {
             "type": "village",
+            "id": "village_1_1",
             "name": "River Village",
             "population": 50,
             "resources": {"food": 100, "water": 200, "materials": 50},
@@ -26,6 +27,7 @@ INITIAL_STATE = {
         },
         {
             "type": "village",
+            "id": "village_3_3",
             "name": "Forest Village",
             "population": 100,
             "resources": {"food": 50, "water": 50, "materials": 400},
@@ -33,11 +35,13 @@ INITIAL_STATE = {
         },
         {
             "type": "river",
+            "id": "river_1_1",
             "location": {"x": 1, "y": 1},
             "resources": {"food": 100, "water": 400, "materials": 0},
         },
         {
             "type": "forest",
+            "id": "forest_3_3",
             "location": {"x": 3, "y": 3},
             "resources": {"food": 50, "water": 0, "materials": 400},
         },
@@ -63,8 +67,9 @@ class EnvironmentType(Enum):
 
 
 class WorldAgent(CellAgent):
-    def __init__(self, model, cell, resources):
+    def __init__(self, model, id, cell, resources):
         super().__init__(model)
+        self.id = id
         self.cell = cell
         self.resources = resources
 
@@ -78,11 +83,12 @@ class EnvironmentAgent(WorldAgent):
     def __init__(
         self,
         model,
+        id,
         cell,
         env_type: EnvironmentType,
         resources,
     ):
-        super().__init__(model, cell, resources)
+        super().__init__(model, id, cell, resources)
         self.type = env_type
 
     def replenish_resources(self):
@@ -94,6 +100,7 @@ class EnvironmentAgent(WorldAgent):
     def to_json(self):
         return {
             "type": self.type.value,
+            "id": self.id,
             "location": {"x": self.cell.coordinate[0], "y": self.cell.coordinate[1]},
             "resources": {
                 resource_type.value: amount
@@ -107,9 +114,10 @@ class RiverEnvironmentAgent(EnvironmentAgent):
     FOOD_REPLENISH_MULTIPLIER = 1.5
     MATERIALS_REPLENISH_RATE = 0
 
-    def __init__(self, model, cell, resources):
+    def __init__(self, model, id, cell, resources):
         super().__init__(
             model,
+            id,
             cell,
             EnvironmentType.RIVER,
             resources,
@@ -121,9 +129,10 @@ class ForestEnvironmentAgent(EnvironmentAgent):
     FOOD_REPLENISH_MULTIPLIER = 1.5
     MATERIALS_REPLENISH_RATE = 50
 
-    def __init__(self, model, cell, resources):
+    def __init__(self, model, id, cell, resources):
         super().__init__(
             model,
+            id,
             cell,
             EnvironmentType.FOREST,
             resources,
@@ -156,9 +165,9 @@ class VillageAgent(WorldAgent):
     WORKER_YIELD = 10  # 1 worker can harvest 10 units of resources per step
 
     def __init__(
-        self, model, cell, name, population, resources: dict[ResourceType, int]
+        self, model, cell, name, id, population, resources: dict[ResourceType, int]
     ):
-        super().__init__(model, cell, resources)
+        super().__init__(model, id, cell, resources)
         self.name = name
         self.population = population
         self.happiness = self.calculate_happiness()
@@ -309,6 +318,7 @@ class VillageAgent(WorldAgent):
     def to_json(self):
         return {
             "type": "village",
+            "id": self.id,
             "name": self.name,
             "population": self.population,
             "resources": {
@@ -323,6 +333,7 @@ class VillageAgent(WorldAgent):
 class WorldModel(mesa.Model):
     def __init__(self, width, height, agents, seed=None):
         super().__init__(seed=seed)
+        self.central_planner = CentralPlanner()
         self.num_agents = len(agents)
         self.grid = OrthogonalMooreGrid(
             (width, height), torus=False, random=self.random
@@ -333,6 +344,7 @@ class WorldModel(mesa.Model):
                     self,
                     self.grid[agent["location"]["x"], agent["location"]["y"]],
                     agent["name"],
+                    agent["id"],
                     agent["population"],
                     {
                         ResourceType[key.upper()]: value
@@ -342,6 +354,7 @@ class WorldModel(mesa.Model):
             elif agent["type"] == EnvironmentType.RIVER.value:
                 RiverEnvironmentAgent(
                     self,
+                    agent["id"],
                     self.grid[agent["location"]["x"], agent["location"]["y"]],
                     {
                         ResourceType[key.upper()]: value
@@ -351,6 +364,7 @@ class WorldModel(mesa.Model):
             elif agent["type"] == EnvironmentType.FOREST.value:
                 ForestEnvironmentAgent(
                     self,
+                    agent["id"],
                     self.grid[agent["location"]["x"], agent["location"]["y"]],
                     {
                         ResourceType[key.upper()]: value
@@ -364,14 +378,78 @@ class WorldModel(mesa.Model):
         env_agents = self.agents.select(agent_type=EnvironmentAgent)
         env_agents.do("replenish_resources")
 
-        village_agents = self.agents.select(agent_type=VillageAgent)
-        village_agents.do("replenish_workers")
-        village_agents.shuffle_do("harvest_resources")
-        village_agents.shuffle_do("consume_food_and_water")
-        village_agents.do("update_happiness")
+        # send state to LLM Central Planner to get actions for each village agent
+        world_state = self.to_json()
+        actions = self.central_planner.get_actions(world_state)
+
+        # village_agents = self.agents.select(agent_type=VillageAgent)
+        # village_agents.do("replenish_workers")
+        # village_agents.shuffle_do("harvest_resources")
+        # village_agents.shuffle_do("consume_food_and_water")
+        # village_agents.do("update_happiness")
 
     def to_json(self):
         return {"agents": [agent.to_json() for agent in self.agents]}
+
+
+from pydantic import BaseModel
+from openai import OpenAI
+
+
+class VillageAction(BaseModel):
+    action: str  # "harvest", "transfer", or "idle"
+    from_agent_id: str
+    to_agent_id: str
+    resource: str
+    amount: int
+
+
+class PlannerResponse(BaseModel):
+    actions: list[VillageAction]
+
+
+class CentralPlanner:
+    LLM_MODEL = "phi4-mini"
+
+    def __init__(self):
+        self.client = OpenAI(
+            base_url="http://localhost:11434/v1/",
+            api_key="ollama",  # required but ignored
+        )
+
+    def get_actions(self, world_state: dict) -> list[VillageAction]:
+        completion = self.client.beta.chat.completions.parse(
+            model=self.LLM_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are the Central Planner. Optimize village happiness given the current world state. "
+                    "You can issue the following actions for each village agent: "
+                    "1) harvest: assign workers to harvest resources from an environment that is in the same location (from_agent_id=environment id, to_agent_id=village id, resource=(food|water|materials), amount=number of workers from the population to use). "
+                    "2) transfer: transfer resources between villages (from_agent_id=giving village id, to_agent_id=receiving village id, resource=(food|water|materials), amount=number of resource); "
+                    "3) idle: do nothing for this step. "
+                    "Village happiness is determined by the amount of food, water, and materials they have in relation to their population. "
+                    "Transferring resources can help balance resource distribution between villages to improve overall happiness. "
+                    "Resources are consumed each step based on population and ration level, so plan accordingly to ensure villages have enough resources to sustain their population and maximize happiness. "
+                    "Resources replenish each step based on the environment type, so consider the current resource levels and replenishment rates when deciding how much to harvest. ",
+                },
+                {"role": "user", "content": f"Current World State: {world_state}"},
+            ],
+            response_format=PlannerResponse,
+        )
+
+        parsed_response: PlannerResponse = completion.choices[0].message.parsed
+
+        if not parsed_response:
+            # model completely failed the schema
+            logger.error(
+                f"Failed to parse AI response: {completion.choices[0].message}"
+            )
+            return []
+
+        actions = parsed_response.actions
+        logger.info(f"Central Planner actions: {actions}")
+        return actions
 
 
 STATE_FILENAME = "state.json"
@@ -396,7 +474,7 @@ def main():
     logger.info(f"Initial state: {state}")
 
     model = WorldModel(5, 5, state["agents"])
-    for _ in range(5):
+    for _ in range(1):
         model.step()
         logger.info(f"State after step {_ + 1}: {model.to_json()}")
 
